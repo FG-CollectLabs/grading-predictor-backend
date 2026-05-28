@@ -11,16 +11,18 @@ import (
 // ── Cards ────────────────────────────────────────────────────────────────────
 
 type CardRow struct {
-	ID         int64     `json:"id"`
-	Game       string    `json:"game"`
-	SetCode    string    `json:"set_code"`
-	SetName    string    `json:"set_name"`
-	CardName   string    `json:"card_name"`
-	CardNumber string    `json:"card_number"`
-	CreatedAt  time.Time `json:"created_at"`
-	CertCount  int64     `json:"cert_count"`
-	PSA10Count int64     `json:"psa10_count"`
-	PSA9Count  int64     `json:"psa9_count"`
+	ID               int64     `json:"id"`
+	Game             string    `json:"game"`
+	SetCode          string    `json:"set_code"`
+	SetName          string    `json:"set_name"`
+	CardName         string    `json:"card_name"`
+	CardNumber       string    `json:"card_number"`
+	CreatedAt        time.Time `json:"created_at"`
+	CertCount        int64     `json:"cert_count"`
+	PSA10Count       int64     `json:"psa10_count"`
+	PSA9Count        int64     `json:"psa9_count"`
+	ImageURL         *string   `json:"image_url"`
+	MarketDisplayKey *string   `json:"market_display_key"`
 }
 
 func listCards(ctx context.Context, db *pgxpool.Pool) ([]CardRow, error) {
@@ -29,7 +31,8 @@ func listCards(ctx context.Context, db *pgxpool.Pool) ([]CardRow, error) {
 			c.id, c.game, c.set_code, c.set_name, c.card_name, c.card_number, c.created_at,
 			COUNT(cert.id),
 			COUNT(cert.id) FILTER (WHERE cert.grade_received = 10),
-			COUNT(cert.id) FILTER (WHERE cert.grade_received = 9)
+			COUNT(cert.id) FILTER (WHERE cert.grade_received = 9),
+			c.image_url, c.market_display_key
 		FROM cards c
 		LEFT JOIN certifications cert ON cert.card_id = c.id
 		GROUP BY c.id
@@ -43,7 +46,7 @@ func listCards(ctx context.Context, db *pgxpool.Pool) ([]CardRow, error) {
 	for rows.Next() {
 		var r CardRow
 		if err := rows.Scan(&r.ID, &r.Game, &r.SetCode, &r.SetName, &r.CardName, &r.CardNumber, &r.CreatedAt,
-			&r.CertCount, &r.PSA10Count, &r.PSA9Count); err != nil {
+			&r.CertCount, &r.PSA10Count, &r.PSA9Count, &r.ImageURL, &r.MarketDisplayKey); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -52,36 +55,43 @@ func listCards(ctx context.Context, db *pgxpool.Pool) ([]CardRow, error) {
 }
 
 type CardDetail struct {
-	ID         int64     `json:"id"`
-	Game       string    `json:"game"`
-	SetCode    string    `json:"set_code"`
-	SetName    string    `json:"set_name"`
-	CardName   string    `json:"card_name"`
-	CardNumber string    `json:"card_number"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID               int64     `json:"id"`
+	Game             string    `json:"game"`
+	SetCode          string    `json:"set_code"`
+	SetName          string    `json:"set_name"`
+	CardName         string    `json:"card_name"`
+	CardNumber       string    `json:"card_number"`
+	CreatedAt        time.Time `json:"created_at"`
+	ImageURL         *string   `json:"image_url"`
+	MarketDisplayKey *string   `json:"market_display_key"`
 }
 
 func getCard(ctx context.Context, db *pgxpool.Pool, id int64) (*CardDetail, error) {
 	var c CardDetail
 	err := db.QueryRow(ctx,
-		`SELECT id, game, set_code, set_name, card_name, card_number, created_at FROM cards WHERE id = $1`, id).
-		Scan(&c.ID, &c.Game, &c.SetCode, &c.SetName, &c.CardName, &c.CardNumber, &c.CreatedAt)
+		`SELECT id, game, set_code, set_name, card_name, card_number, created_at, image_url, market_display_key
+		 FROM cards WHERE id = $1`, id).
+		Scan(&c.ID, &c.Game, &c.SetCode, &c.SetName, &c.CardName, &c.CardNumber, &c.CreatedAt,
+			&c.ImageURL, &c.MarketDisplayKey)
 	if err != nil {
 		return nil, err
 	}
 	return &c, nil
 }
 
-func createCard(ctx context.Context, db *pgxpool.Pool, game, setCode, setName, cardName, cardNumber string) (*CardDetail, error) {
+func createCard(ctx context.Context, db *pgxpool.Pool, game, setCode, setName, cardName, cardNumber string, imageURL, marketDisplayKey *string) (*CardDetail, error) {
 	var c CardDetail
 	err := db.QueryRow(ctx, `
-		INSERT INTO cards (game, set_code, set_name, card_name, card_number)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO cards (game, set_code, set_name, card_name, card_number, image_url, market_display_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (game, set_code, card_number) DO UPDATE
-			SET set_name = EXCLUDED.set_name, card_name = EXCLUDED.card_name
-		RETURNING id, game, set_code, set_name, card_name, card_number, created_at`,
-		game, setCode, setName, cardName, cardNumber).
-		Scan(&c.ID, &c.Game, &c.SetCode, &c.SetName, &c.CardName, &c.CardNumber, &c.CreatedAt)
+			SET set_name = EXCLUDED.set_name, card_name = EXCLUDED.card_name,
+			    image_url = COALESCE(EXCLUDED.image_url, cards.image_url),
+			    market_display_key = COALESCE(EXCLUDED.market_display_key, cards.market_display_key)
+		RETURNING id, game, set_code, set_name, card_name, card_number, created_at, image_url, market_display_key`,
+		game, setCode, setName, cardName, cardNumber, imageURL, marketDisplayKey).
+		Scan(&c.ID, &c.Game, &c.SetCode, &c.SetName, &c.CardName, &c.CardNumber, &c.CreatedAt,
+			&c.ImageURL, &c.MarketDisplayKey)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +108,8 @@ type CertRow struct {
 	GradeReceived     *int16     `json:"grade_received"`
 	GradedAt          *time.Time `json:"graded_at"`
 	Notes             *string    `json:"notes"`
+	Category          string     `json:"category"`
+	Purpose           string     `json:"purpose"`
 	CreatedAt         time.Time  `json:"created_at"`
 	FrontImage        *string    `json:"front_image"`
 	BackImage         *string    `json:"back_image"`
@@ -122,7 +134,8 @@ func listCertsForCard(ctx context.Context, db *pgxpool.Pool, cardID int64) ([]Ce
 	rows, err := db.Query(ctx, `
 		SELECT
 			cert.id, cert.card_id, cert.cert_number, cert.grader,
-			cert.grade_received, cert.graded_at, cert.notes, cert.created_at,
+			cert.grade_received, cert.graded_at, cert.notes,
+			cert.category, cert.purpose, cert.created_at,
 			fi.gcs_path, bi.gcs_path,
 			i.centering_front_lr, i.centering_front_tb,
 			i.centering_back_lr,  i.centering_back_tb,
@@ -149,7 +162,8 @@ func listCertsForCard(ctx context.Context, db *pgxpool.Pool, cardID int64) ([]Ce
 		var gradedAt pgtype.Date
 		if err := rows.Scan(
 			&r.ID, &r.CardID, &r.CertNumber, &r.Grader,
-			&r.GradeReceived, &gradedAt, &r.Notes, &r.CreatedAt,
+			&r.GradeReceived, &gradedAt, &r.Notes,
+			&r.Category, &r.Purpose, &r.CreatedAt,
 			&r.FrontImage, &r.BackImage,
 			&r.CenteringFrontLR, &r.CenteringFrontTB,
 			&r.CenteringBackLR, &r.CenteringBackTB,
@@ -177,6 +191,8 @@ type CertDetail struct {
 	GradeReceived *int16    `json:"grade_received"`
 	GradedAt      *string   `json:"graded_at"`
 	Notes         *string   `json:"notes"`
+	Category      string    `json:"category"`
+	Purpose       string    `json:"purpose"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -184,9 +200,10 @@ func getCert(ctx context.Context, db *pgxpool.Pool, id int64) (*CertDetail, erro
 	var c CertDetail
 	var gradedAt pgtype.Date
 	err := db.QueryRow(ctx,
-		`SELECT id, card_id, cert_number, grader, grade_received, graded_at, notes, created_at
+		`SELECT id, card_id, cert_number, grader, grade_received, graded_at, notes, category, purpose, created_at
 		 FROM certifications WHERE id = $1`, id).
-		Scan(&c.ID, &c.CardID, &c.CertNumber, &c.Grader, &c.GradeReceived, &gradedAt, &c.Notes, &c.CreatedAt)
+		Scan(&c.ID, &c.CardID, &c.CertNumber, &c.Grader, &c.GradeReceived, &gradedAt, &c.Notes,
+			&c.Category, &c.Purpose, &c.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -197,19 +214,26 @@ func getCert(ctx context.Context, db *pgxpool.Pool, id int64) (*CertDetail, erro
 	return &c, nil
 }
 
-func createCert(ctx context.Context, db *pgxpool.Pool, cardID int64, certNumber, grader, notes string) (*CertDetail, error) {
+func createCert(ctx context.Context, db *pgxpool.Pool, cardID int64, certNumber, grader, notes, category, purpose string) (*CertDetail, error) {
 	var notesPtr *string
 	if notes != "" {
 		notesPtr = &notes
 	}
+	if category == "" {
+		category = "raw"
+	}
+	if purpose == "" {
+		purpose = "analytics"
+	}
 	var c CertDetail
 	var gradedAt pgtype.Date
 	err := db.QueryRow(ctx,
-		`INSERT INTO certifications (card_id, cert_number, grader, notes)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, card_id, cert_number, grader, grade_received, graded_at, notes, created_at`,
-		cardID, certNumber, grader, notesPtr).
-		Scan(&c.ID, &c.CardID, &c.CertNumber, &c.Grader, &c.GradeReceived, &gradedAt, &c.Notes, &c.CreatedAt)
+		`INSERT INTO certifications (card_id, cert_number, grader, notes, category, purpose)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 RETURNING id, card_id, cert_number, grader, grade_received, graded_at, notes, category, purpose, created_at`,
+		cardID, certNumber, grader, notesPtr, category, purpose).
+		Scan(&c.ID, &c.CardID, &c.CertNumber, &c.Grader, &c.GradeReceived, &gradedAt, &c.Notes,
+			&c.Category, &c.Purpose, &c.CreatedAt)
 	if err != nil {
 		return nil, err
 	}

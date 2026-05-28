@@ -96,11 +96,13 @@ func (h *Handler) listCertsForCard(w http.ResponseWriter, r *http.Request) {
 }
 
 type createCardRequest struct {
-	Game       string `json:"game"`
-	SetCode    string `json:"set_code"`
-	SetName    string `json:"set_name"`
-	CardName   string `json:"card_name"`
-	CardNumber string `json:"card_number"`
+	Game             string  `json:"game"`
+	SetCode          string  `json:"set_code"`
+	SetName          string  `json:"set_name"`
+	CardName         string  `json:"card_name"`
+	CardNumber       string  `json:"card_number"`
+	ImageURL         *string `json:"image_url"`
+	MarketDisplayKey *string `json:"market_display_key"`
 }
 
 func (h *Handler) createCard(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +115,8 @@ func (h *Handler) createCard(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, "missing_fields", "game, set_code, card_name, card_number required")
 		return
 	}
-	card, err := createCard(r.Context(), h.DB, req.Game, req.SetCode, req.SetName, req.CardName, req.CardNumber)
+	card, err := createCard(r.Context(), h.DB, req.Game, req.SetCode, req.SetName, req.CardName, req.CardNumber,
+		req.ImageURL, req.MarketDisplayKey)
 	if err != nil {
 		httpx.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
@@ -128,6 +131,8 @@ type createCertRequest struct {
 	CertNumber string `json:"cert_number"`
 	Grader     string `json:"grader"`
 	Notes      string `json:"notes"`
+	Category   string `json:"category"` // raw | psa9 | psa10 | cgc9 | cgc10
+	Purpose    string `json:"purpose"`  // analytics | buy_and_grade | crack_and_regrade
 }
 
 func (h *Handler) createCert(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +148,7 @@ func (h *Handler) createCert(w http.ResponseWriter, r *http.Request) {
 	if req.Grader == "" {
 		req.Grader = "PSA"
 	}
-	cert, err := createCert(r.Context(), h.DB, req.CardID, req.CertNumber, req.Grader, req.Notes)
+	cert, err := createCert(r.Context(), h.DB, req.CardID, req.CertNumber, req.Grader, req.Notes, req.Category, req.Purpose)
 	if err != nil {
 		httpx.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
