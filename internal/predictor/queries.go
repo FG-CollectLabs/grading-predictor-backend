@@ -214,6 +214,44 @@ func getCert(ctx context.Context, db *pgxpool.Pool, id int64) (*CertDetail, erro
 	return &c, nil
 }
 
+type CertDetailResponse struct {
+	ID            int64      `json:"id"`
+	CardID        int64      `json:"card_id"`
+	CertNumber    string     `json:"cert_number"`
+	Grader        string     `json:"grader"`
+	GradeReceived *int16     `json:"grade_received"`
+	GradedAt      *string    `json:"graded_at"`
+	Notes         *string    `json:"notes"`
+	Category      string     `json:"category"`
+	Purpose       string     `json:"purpose"`
+	CreatedAt     time.Time  `json:"created_at"`
+	FrontImage    *string    `json:"front_image"`
+	BackImage     *string    `json:"back_image"`
+}
+
+func getCertDetail(ctx context.Context, db *pgxpool.Pool, id int64) (*CertDetailResponse, error) {
+	var c CertDetailResponse
+	var gradedAt pgtype.Date
+	err := db.QueryRow(ctx, `
+		SELECT cert.id, cert.card_id, cert.cert_number, cert.grader, cert.grade_received, cert.graded_at,
+		       cert.notes, cert.category, cert.purpose, cert.created_at,
+		       fi.gcs_path, bi.gcs_path
+		FROM certifications cert
+		LEFT JOIN cert_images fi ON fi.cert_id = cert.id AND fi.side = 'front'
+		LEFT JOIN cert_images bi ON bi.cert_id = cert.id AND bi.side = 'back'
+		WHERE cert.id = $1`, id).
+		Scan(&c.ID, &c.CardID, &c.CertNumber, &c.Grader, &c.GradeReceived, &gradedAt,
+			&c.Notes, &c.Category, &c.Purpose, &c.CreatedAt, &c.FrontImage, &c.BackImage)
+	if err != nil {
+		return nil, err
+	}
+	if gradedAt.Valid {
+		s := gradedAt.Time.Format("2006-01-02")
+		c.GradedAt = &s
+	}
+	return &c, nil
+}
+
 func createCert(ctx context.Context, db *pgxpool.Pool, cardID int64, certNumber, grader, notes, category, purpose string) (*CertDetail, error) {
 	var notesPtr *string
 	if notes != "" {
