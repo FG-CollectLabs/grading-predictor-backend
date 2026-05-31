@@ -357,22 +357,24 @@ func (h *Handler) uploadCertImage(w http.ResponseWriter, r *http.Request) {
 // ── Inspections ──────────────────────────────────────────────────────────────
 
 type createInspectionRequest struct {
-	CenteringFrontLR *int16  `json:"centering_front_lr"`
-	CenteringFrontTB *int16  `json:"centering_front_tb"`
-	CenteringBackLR  *int16  `json:"centering_back_lr"`
-	CenteringBackTB  *int16  `json:"centering_back_tb"`
-	SurfaceFront     *string `json:"surface_front"`
-	SurfaceBack      *string `json:"surface_back"`
-	CornerTL         *string `json:"corner_tl"`
-	CornerTR         *string `json:"corner_tr"`
-	CornerBL         *string `json:"corner_bl"`
-	CornerBR         *string `json:"corner_br"`
-	EdgeTop          *string `json:"edge_top"`
-	EdgeBottom       *string `json:"edge_bottom"`
-	EdgeLeft         *string `json:"edge_left"`
-	EdgeRight        *string `json:"edge_right"`
-	Notes            *string `json:"notes"`
-	Source           string  `json:"source"` // "manual" | "auto"
+	CenteringFrontLR       *int16   `json:"centering_front_lr"`
+	CenteringFrontTB       *int16   `json:"centering_front_tb"`
+	CenteringFrontRotation *float64 `json:"centering_front_rotation"`
+	CenteringBackLR        *int16   `json:"centering_back_lr"`
+	CenteringBackTB        *int16   `json:"centering_back_tb"`
+	CenteringBackRotation  *float64 `json:"centering_back_rotation"`
+	SurfaceFront           *string  `json:"surface_front"`
+	SurfaceBack            *string  `json:"surface_back"`
+	CornerTL               *string  `json:"corner_tl"`
+	CornerTR               *string  `json:"corner_tr"`
+	CornerBL               *string  `json:"corner_bl"`
+	CornerBR               *string  `json:"corner_br"`
+	EdgeTop                *string  `json:"edge_top"`
+	EdgeBottom             *string  `json:"edge_bottom"`
+	EdgeLeft               *string  `json:"edge_left"`
+	EdgeRight              *string  `json:"edge_right"`
+	Notes                  *string  `json:"notes"`
+	Source                 string   `json:"source"` // "manual" | "auto"
 }
 
 func (h *Handler) createInspection(w http.ResponseWriter, r *http.Request) {

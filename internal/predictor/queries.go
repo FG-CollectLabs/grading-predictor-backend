@@ -404,25 +404,27 @@ func upsertCertImage(ctx context.Context, db *pgxpool.Pool, certID int64, side, 
 // ── Inspections ──────────────────────────────────────────────────────────────
 
 type InspectionRow struct {
-	ID               int64     `json:"id"`
-	CertID           int64     `json:"cert_id"`
-	CenteringFrontLR *int16    `json:"centering_front_lr"`
-	CenteringFrontTB *int16    `json:"centering_front_tb"`
-	CenteringBackLR  *int16    `json:"centering_back_lr"`
-	CenteringBackTB  *int16    `json:"centering_back_tb"`
-	SurfaceFront     *string   `json:"surface_front"`
-	SurfaceBack      *string   `json:"surface_back"`
-	CornerTL         *string   `json:"corner_tl"`
-	CornerTR         *string   `json:"corner_tr"`
-	CornerBL         *string   `json:"corner_bl"`
-	CornerBR         *string   `json:"corner_br"`
-	EdgeTop          *string   `json:"edge_top"`
-	EdgeBottom       *string   `json:"edge_bottom"`
-	EdgeLeft         *string   `json:"edge_left"`
-	EdgeRight        *string   `json:"edge_right"`
-	Notes            *string   `json:"notes"`
-	Source           string    `json:"source"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID                     int64    `json:"id"`
+	CertID                 int64    `json:"cert_id"`
+	CenteringFrontLR       *int16   `json:"centering_front_lr"`
+	CenteringFrontTB       *int16   `json:"centering_front_tb"`
+	CenteringFrontRotation *float64 `json:"centering_front_rotation"`
+	CenteringBackLR        *int16   `json:"centering_back_lr"`
+	CenteringBackTB        *int16   `json:"centering_back_tb"`
+	CenteringBackRotation  *float64 `json:"centering_back_rotation"`
+	SurfaceFront           *string  `json:"surface_front"`
+	SurfaceBack            *string  `json:"surface_back"`
+	CornerTL               *string  `json:"corner_tl"`
+	CornerTR               *string  `json:"corner_tr"`
+	CornerBL               *string  `json:"corner_bl"`
+	CornerBR               *string  `json:"corner_br"`
+	EdgeTop                *string  `json:"edge_top"`
+	EdgeBottom             *string  `json:"edge_bottom"`
+	EdgeLeft               *string  `json:"edge_left"`
+	EdgeRight              *string  `json:"edge_right"`
+	Notes                  *string  `json:"notes"`
+	Source                 string   `json:"source"`
+	CreatedAt              time.Time `json:"created_at"`
 }
 
 func createInspection(ctx context.Context, db *pgxpool.Pool, certID int64, req createInspectionRequest) (*InspectionRow, error) {
@@ -430,32 +432,32 @@ func createInspection(ctx context.Context, db *pgxpool.Pool, certID int64, req c
 	err := db.QueryRow(ctx, `
 		INSERT INTO inspections (
 			cert_id,
-			centering_front_lr, centering_front_tb,
-			centering_back_lr,  centering_back_tb,
+			centering_front_lr, centering_front_tb, centering_front_rotation,
+			centering_back_lr,  centering_back_tb,  centering_back_rotation,
 			surface_front, surface_back,
 			corner_tl, corner_tr, corner_bl, corner_br,
 			edge_top, edge_bottom, edge_left, edge_right,
 			notes, source
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		RETURNING
 			id, cert_id,
-			centering_front_lr, centering_front_tb,
-			centering_back_lr, centering_back_tb,
+			centering_front_lr, centering_front_tb, centering_front_rotation,
+			centering_back_lr, centering_back_tb, centering_back_rotation,
 			surface_front, surface_back,
 			corner_tl, corner_tr, corner_bl, corner_br,
 			edge_top, edge_bottom, edge_left, edge_right,
 			notes, source, created_at`,
 		certID,
-		req.CenteringFrontLR, req.CenteringFrontTB,
-		req.CenteringBackLR, req.CenteringBackTB,
+		req.CenteringFrontLR, req.CenteringFrontTB, req.CenteringFrontRotation,
+		req.CenteringBackLR, req.CenteringBackTB, req.CenteringBackRotation,
 		req.SurfaceFront, req.SurfaceBack,
 		req.CornerTL, req.CornerTR, req.CornerBL, req.CornerBR,
 		req.EdgeTop, req.EdgeBottom, req.EdgeLeft, req.EdgeRight,
 		req.Notes, req.Source,
 	).Scan(
 		&r.ID, &r.CertID,
-		&r.CenteringFrontLR, &r.CenteringFrontTB,
-		&r.CenteringBackLR, &r.CenteringBackTB,
+		&r.CenteringFrontLR, &r.CenteringFrontTB, &r.CenteringFrontRotation,
+		&r.CenteringBackLR, &r.CenteringBackTB, &r.CenteringBackRotation,
 		&r.SurfaceFront, &r.SurfaceBack,
 		&r.CornerTL, &r.CornerTR, &r.CornerBL, &r.CornerBR,
 		&r.EdgeTop, &r.EdgeBottom, &r.EdgeLeft, &r.EdgeRight,
@@ -471,8 +473,8 @@ func listInspectionsForCert(ctx context.Context, db *pgxpool.Pool, certID int64)
 	rows, err := db.Query(ctx, `
 		SELECT
 			id, cert_id,
-			centering_front_lr, centering_front_tb,
-			centering_back_lr, centering_back_tb,
+			centering_front_lr, centering_front_tb, centering_front_rotation,
+			centering_back_lr, centering_back_tb, centering_back_rotation,
 			surface_front, surface_back,
 			corner_tl, corner_tr, corner_bl, corner_br,
 			edge_top, edge_bottom, edge_left, edge_right,
@@ -488,8 +490,8 @@ func listInspectionsForCert(ctx context.Context, db *pgxpool.Pool, certID int64)
 		var r InspectionRow
 		if err := rows.Scan(
 			&r.ID, &r.CertID,
-			&r.CenteringFrontLR, &r.CenteringFrontTB,
-			&r.CenteringBackLR, &r.CenteringBackTB,
+			&r.CenteringFrontLR, &r.CenteringFrontTB, &r.CenteringFrontRotation,
+			&r.CenteringBackLR, &r.CenteringBackTB, &r.CenteringBackRotation,
 			&r.SurfaceFront, &r.SurfaceBack,
 			&r.CornerTL, &r.CornerTR, &r.CornerBL, &r.CornerBR,
 			&r.EdgeTop, &r.EdgeBottom, &r.EdgeLeft, &r.EdgeRight,
