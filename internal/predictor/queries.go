@@ -404,27 +404,35 @@ func upsertCertImage(ctx context.Context, db *pgxpool.Pool, certID int64, side, 
 // ── Inspections ──────────────────────────────────────────────────────────────
 
 type InspectionRow struct {
-	ID                     int64    `json:"id"`
-	CertID                 int64    `json:"cert_id"`
-	CenteringFrontLR       *int16   `json:"centering_front_lr"`
-	CenteringFrontTB       *int16   `json:"centering_front_tb"`
-	CenteringFrontRotation *float64 `json:"centering_front_rotation"`
-	CenteringBackLR        *int16   `json:"centering_back_lr"`
-	CenteringBackTB        *int16   `json:"centering_back_tb"`
-	CenteringBackRotation  *float64 `json:"centering_back_rotation"`
-	SurfaceFront           *string  `json:"surface_front"`
-	SurfaceBack            *string  `json:"surface_back"`
-	CornerTL               *string  `json:"corner_tl"`
-	CornerTR               *string  `json:"corner_tr"`
-	CornerBL               *string  `json:"corner_bl"`
-	CornerBR               *string  `json:"corner_br"`
-	EdgeTop                *string  `json:"edge_top"`
-	EdgeBottom             *string  `json:"edge_bottom"`
-	EdgeLeft               *string  `json:"edge_left"`
-	EdgeRight              *string  `json:"edge_right"`
-	Notes                  *string  `json:"notes"`
-	Source                 string   `json:"source"`
+	ID                     int64     `json:"id"`
+	CertID                 int64     `json:"cert_id"`
+	CenteringFrontLR       *int16    `json:"centering_front_lr"`
+	CenteringFrontTB       *int16    `json:"centering_front_tb"`
+	CenteringFrontRotation *float64  `json:"centering_front_rotation"`
+	CenteringBackLR        *int16    `json:"centering_back_lr"`
+	CenteringBackTB        *int16    `json:"centering_back_tb"`
+	CenteringBackRotation  *float64  `json:"centering_back_rotation"`
+	SurfaceFront           *string   `json:"surface_front"`
+	SurfaceBack            *string   `json:"surface_back"`
+	CornerTL               *string   `json:"corner_tl"`
+	CornerTR               *string   `json:"corner_tr"`
+	CornerBL               *string   `json:"corner_bl"`
+	CornerBR               *string   `json:"corner_br"`
+	EdgeTop                *string   `json:"edge_top"`
+	EdgeBottom             *string   `json:"edge_bottom"`
+	EdgeLeft               *string   `json:"edge_left"`
+	EdgeRight              *string   `json:"edge_right"`
+	Notes                  *string   `json:"notes"`
+	Source                 string    `json:"source"`
 	CreatedAt              time.Time `json:"created_at"`
+	CornersDefectiveCut    *int16    `json:"corners_defective_cut"`
+	CornersMajorWhitening  *int16    `json:"corners_major_whitening"`
+	CornersMinorWhitening  *int16    `json:"corners_minor_whitening"`
+	CornersMicroWhitening  *int16    `json:"corners_micro_whitening"`
+	EdgesWhitening         *int16    `json:"edges_whitening"`
+	SurfaceDeadPixels      *int16    `json:"surface_dead_pixels"`
+	SurfaceDimples         *int16    `json:"surface_dimples"`
+	SurfacePrintLines      *int16    `json:"surface_print_lines"`
 }
 
 func createInspection(ctx context.Context, db *pgxpool.Pool, certID int64, req createInspectionRequest) (*InspectionRow, error) {
@@ -437,8 +445,11 @@ func createInspection(ctx context.Context, db *pgxpool.Pool, certID int64, req c
 			surface_front, surface_back,
 			corner_tl, corner_tr, corner_bl, corner_br,
 			edge_top, edge_bottom, edge_left, edge_right,
-			notes, source
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+			notes, source,
+			corners_defective_cut, corners_major_whitening, corners_minor_whitening, corners_micro_whitening,
+			edges_whitening,
+			surface_dead_pixels, surface_dimples, surface_print_lines
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
 		RETURNING
 			id, cert_id,
 			centering_front_lr, centering_front_tb, centering_front_rotation,
@@ -446,7 +457,10 @@ func createInspection(ctx context.Context, db *pgxpool.Pool, certID int64, req c
 			surface_front, surface_back,
 			corner_tl, corner_tr, corner_bl, corner_br,
 			edge_top, edge_bottom, edge_left, edge_right,
-			notes, source, created_at`,
+			notes, source, created_at,
+			corners_defective_cut, corners_major_whitening, corners_minor_whitening, corners_micro_whitening,
+			edges_whitening,
+			surface_dead_pixels, surface_dimples, surface_print_lines`,
 		certID,
 		req.CenteringFrontLR, req.CenteringFrontTB, req.CenteringFrontRotation,
 		req.CenteringBackLR, req.CenteringBackTB, req.CenteringBackRotation,
@@ -454,6 +468,9 @@ func createInspection(ctx context.Context, db *pgxpool.Pool, certID int64, req c
 		req.CornerTL, req.CornerTR, req.CornerBL, req.CornerBR,
 		req.EdgeTop, req.EdgeBottom, req.EdgeLeft, req.EdgeRight,
 		req.Notes, req.Source,
+		req.CornersDefectiveCut, req.CornersMajorWhitening, req.CornersMinorWhitening, req.CornersMicroWhitening,
+		req.EdgesWhitening,
+		req.SurfaceDeadPixels, req.SurfaceDimples, req.SurfacePrintLines,
 	).Scan(
 		&r.ID, &r.CertID,
 		&r.CenteringFrontLR, &r.CenteringFrontTB, &r.CenteringFrontRotation,
@@ -462,6 +479,9 @@ func createInspection(ctx context.Context, db *pgxpool.Pool, certID int64, req c
 		&r.CornerTL, &r.CornerTR, &r.CornerBL, &r.CornerBR,
 		&r.EdgeTop, &r.EdgeBottom, &r.EdgeLeft, &r.EdgeRight,
 		&r.Notes, &r.Source, &r.CreatedAt,
+		&r.CornersDefectiveCut, &r.CornersMajorWhitening, &r.CornersMinorWhitening, &r.CornersMicroWhitening,
+		&r.EdgesWhitening,
+		&r.SurfaceDeadPixels, &r.SurfaceDimples, &r.SurfacePrintLines,
 	)
 	if err != nil {
 		return nil, err
@@ -478,7 +498,10 @@ func listInspectionsForCert(ctx context.Context, db *pgxpool.Pool, certID int64)
 			surface_front, surface_back,
 			corner_tl, corner_tr, corner_bl, corner_br,
 			edge_top, edge_bottom, edge_left, edge_right,
-			notes, source, created_at
+			notes, source, created_at,
+			corners_defective_cut, corners_major_whitening, corners_minor_whitening, corners_micro_whitening,
+			edges_whitening,
+			surface_dead_pixels, surface_dimples, surface_print_lines
 		FROM inspections WHERE cert_id = $1 ORDER BY created_at DESC`, certID)
 	if err != nil {
 		return nil, err
@@ -496,6 +519,9 @@ func listInspectionsForCert(ctx context.Context, db *pgxpool.Pool, certID int64)
 			&r.CornerTL, &r.CornerTR, &r.CornerBL, &r.CornerBR,
 			&r.EdgeTop, &r.EdgeBottom, &r.EdgeLeft, &r.EdgeRight,
 			&r.Notes, &r.Source, &r.CreatedAt,
+			&r.CornersDefectiveCut, &r.CornersMajorWhitening, &r.CornersMinorWhitening, &r.CornersMicroWhitening,
+			&r.EdgesWhitening,
+			&r.SurfaceDeadPixels, &r.SurfaceDimples, &r.SurfacePrintLines,
 		); err != nil {
 			return nil, err
 		}

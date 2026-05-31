@@ -16,6 +16,7 @@ type Config struct {
 	CORSOrigins   []string
 	AdminAPIToken string
 	GCSBucket     string
+	ImageDir      string
 }
 
 func Load() (*Config, error) {
@@ -45,5 +46,6 @@ func Load() (*Config, error) {
 		CORSOrigins:   origins,
 		AdminAPIToken: os.Getenv("ADMIN_API_TOKEN"),
 		GCSBucket:     os.Getenv("GCS_BUCKET"),
+		ImageDir:      os.Getenv("IMAGE_DIR"),
 	}, nil
 }

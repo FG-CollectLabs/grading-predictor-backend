@@ -3,8 +3,10 @@ package predictor
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,6 +24,7 @@ type Handler struct {
 	DB        *pgxpool.Pool
 	GCSClient interface{} // *storage.Client when wired
 	GCSBucket string
+	ImageDir  string // local directory for image storage; serves under GET /v1/images/
 }
 
 func (h *Handler) Routes(mux *http.ServeMux, auth httpx.Middleware) {
@@ -40,6 +43,11 @@ func (h *Handler) Routes(mux *http.ServeMux, auth httpx.Middleware) {
 	mux.Handle("POST /v1/certs/{id}/images", auth(http.HandlerFunc(h.uploadCertImage)))
 	mux.Handle("POST /v1/certs/{id}/inspections", auth(http.HandlerFunc(h.createInspection)))
 	mux.HandleFunc("GET /v1/certs/{id}/inspections", h.listInspections)
+
+	if h.ImageDir != "" {
+		fs := http.FileServer(http.Dir(h.ImageDir))
+		mux.Handle("GET /v1/images/", http.StripPrefix("/v1/images/", fs))
+	}
 }
 
 // ── Cards ────────────────────────────────────────────────────────────────────
@@ -342,8 +350,25 @@ func (h *Handler) uploadCertImage(w http.ResponseWriter, r *http.Request) {
 	}
 	gcsPath := fmt.Sprintf("%s/%s%s", cert.CertNumber, side, ext)
 
-	// GCS upload: wire h.GCSClient (*storage.Client) when bucket is provisioned.
-	slog.Info("image received, skipping GCS upload (not configured)", "path", gcsPath)
+	if h.ImageDir != "" {
+		dir := filepath.Join(h.ImageDir, cert.CertNumber)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			httpx.WriteError(w, http.StatusInternalServerError, "io_error", err.Error())
+			return
+		}
+		dst, err := os.Create(filepath.Join(dir, side+ext))
+		if err != nil {
+			httpx.WriteError(w, http.StatusInternalServerError, "io_error", err.Error())
+			return
+		}
+		defer dst.Close()
+		if _, err := io.Copy(dst, file); err != nil {
+			httpx.WriteError(w, http.StatusInternalServerError, "io_error", err.Error())
+			return
+		}
+	} else {
+		slog.Info("image received, skipping disk write (IMAGE_DIR not configured)", "path", gcsPath)
+	}
 
 	img, err := upsertCertImage(r.Context(), h.DB, certID, side, gcsPath)
 	if err != nil {
@@ -375,6 +400,14 @@ type createInspectionRequest struct {
 	EdgeRight              *string  `json:"edge_right"`
 	Notes                  *string  `json:"notes"`
 	Source                 string   `json:"source"` // "manual" | "auto"
+	CornersDefectiveCut    *int16   `json:"corners_defective_cut"`
+	CornersMajorWhitening  *int16   `json:"corners_major_whitening"`
+	CornersMinorWhitening  *int16   `json:"corners_minor_whitening"`
+	CornersMicroWhitening  *int16   `json:"corners_micro_whitening"`
+	EdgesWhitening         *int16   `json:"edges_whitening"`
+	SurfaceDeadPixels      *int16   `json:"surface_dead_pixels"`
+	SurfaceDimples         *int16   `json:"surface_dimples"`
+	SurfacePrintLines      *int16   `json:"surface_print_lines"`
 }
 
 func (h *Handler) createInspection(w http.ResponseWriter, r *http.Request) {

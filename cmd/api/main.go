@@ -42,6 +42,7 @@ func main() {
 		DB:        pool,
 		GCSClient: nil,
 		GCSBucket: cfg.GCSBucket,
+		ImageDir:  cfg.ImageDir,
 	}
 
 	mux := http.NewServeMux()
