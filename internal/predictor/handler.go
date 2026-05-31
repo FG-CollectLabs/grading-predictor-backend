@@ -34,8 +34,10 @@ func (h *Handler) Routes(mux *http.ServeMux, auth httpx.Middleware) {
 	mux.HandleFunc("GET /v1/cards/{id}/certs", h.listCertsForCard)
 
 	mux.Handle("POST /v1/cards", auth(http.HandlerFunc(h.createCard)))
+	mux.Handle("PATCH /v1/cards/{id}", auth(http.HandlerFunc(h.patchCard)))
 	mux.Handle("DELETE /v1/cards/{id}", auth(http.HandlerFunc(h.deleteCard)))
 	mux.Handle("POST /v1/certs", auth(http.HandlerFunc(h.createCert)))
+	mux.HandleFunc("GET /v1/certs/check", h.checkCertNumber)
 	mux.HandleFunc("GET /v1/certs/{id}", h.getCertDetail)
 	mux.Handle("PATCH /v1/certs/{id}", auth(http.HandlerFunc(h.patchCert)))
 	mux.Handle("DELETE /v1/certs/{id}", auth(http.HandlerFunc(h.deleteCert)))
@@ -136,6 +138,43 @@ func (h *Handler) createCard(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, card)
 }
 
+type patchCardRequest struct {
+	Game             string  `json:"game"`
+	SetCode          string  `json:"set_code"`
+	SetName          string  `json:"set_name"`
+	CardName         string  `json:"card_name"`
+	CardNumber       string  `json:"card_number"`
+	ImageURL         *string `json:"image_url"`
+	MarketDisplayKey *string `json:"market_display_key"`
+}
+
+func (h *Handler) patchCard(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "bad_id", "invalid card id")
+		return
+	}
+	var req patchCardRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if req.CardName == "" || req.CardNumber == "" {
+		httpx.WriteError(w, http.StatusBadRequest, "missing_fields", "card_name and card_number required")
+		return
+	}
+	card, err := updateCard(r.Context(), h.DB, id, req.Game, req.SetCode, req.SetName, req.CardName, req.CardNumber, req.ImageURL, req.MarketDisplayKey)
+	if err != nil {
+		if isNotFound(err) {
+			httpx.WriteError(w, http.StatusNotFound, "not_found", "card not found")
+			return
+		}
+		httpx.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, card)
+}
+
 func (h *Handler) deleteCard(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
@@ -155,6 +194,31 @@ func (h *Handler) deleteCard(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Certs ────────────────────────────────────────────────────────────────────
+
+func (h *Handler) checkCertNumber(w http.ResponseWriter, r *http.Request) {
+	num := strings.TrimSpace(r.URL.Query().Get("cert_number"))
+	if num == "" {
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"exists": false})
+		return
+	}
+	result, err := lookupCertByNumber(r.Context(), h.DB, num)
+	if err != nil {
+		httpx.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if result == nil {
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"exists": false})
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"exists":      true,
+		"cert_id":     result.ID,
+		"card_id":     result.CardID,
+		"cert_number": result.CertNumber,
+		"grader":      result.Grader,
+		"category":    result.Category,
+	})
+}
 
 func (h *Handler) getCertDetail(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))

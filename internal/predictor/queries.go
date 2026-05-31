@@ -98,6 +98,23 @@ func createCard(ctx context.Context, db *pgxpool.Pool, game, setCode, setName, c
 	return &c, nil
 }
 
+func updateCard(ctx context.Context, db *pgxpool.Pool, id int64, game, setCode, setName, cardName, cardNumber string, imageURL, marketDisplayKey *string) (*CardDetail, error) {
+	var c CardDetail
+	err := db.QueryRow(ctx, `
+		UPDATE cards
+		SET game = $2, set_code = $3, set_name = $4, card_name = $5, card_number = $6,
+		    image_url = $7, market_display_key = $8
+		WHERE id = $1
+		RETURNING id, game, set_code, set_name, card_name, card_number, created_at, image_url, market_display_key`,
+		id, game, setCode, setName, cardName, cardNumber, imageURL, marketDisplayKey).
+		Scan(&c.ID, &c.Game, &c.SetCode, &c.SetName, &c.CardName, &c.CardNumber, &c.CreatedAt,
+			&c.ImageURL, &c.MarketDisplayKey)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 func deleteCard(ctx context.Context, db *pgxpool.Pool, id int64) (bool, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -224,6 +241,28 @@ type CertDetail struct {
 	Category      string    `json:"category"`
 	Purpose       string    `json:"purpose"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+type CertLookup struct {
+	ID         int64  `json:"id"`
+	CardID     int64  `json:"card_id"`
+	CertNumber string `json:"cert_number"`
+	Grader     string `json:"grader"`
+	Category   string `json:"category"`
+}
+
+func lookupCertByNumber(ctx context.Context, db *pgxpool.Pool, certNumber string) (*CertLookup, error) {
+	var r CertLookup
+	err := db.QueryRow(ctx,
+		`SELECT id, card_id, cert_number, grader, category FROM certifications WHERE cert_number = $1 LIMIT 1`,
+		certNumber).Scan(&r.ID, &r.CardID, &r.CertNumber, &r.Grader, &r.Category)
+	if err != nil {
+		if isNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &r, nil
 }
 
 func getCert(ctx context.Context, db *pgxpool.Pool, id int64) (*CertDetail, error) {
