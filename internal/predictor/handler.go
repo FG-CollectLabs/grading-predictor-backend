@@ -31,6 +31,7 @@ func (h *Handler) Routes(mux *http.ServeMux, auth httpx.Middleware) {
 	mux.HandleFunc("GET /v1/cards/{id}/certs", h.listCertsForCard)
 
 	mux.Handle("POST /v1/cards", auth(http.HandlerFunc(h.createCard)))
+	mux.Handle("DELETE /v1/cards/{id}", auth(http.HandlerFunc(h.deleteCard)))
 	mux.Handle("POST /v1/certs", auth(http.HandlerFunc(h.createCert)))
 	mux.HandleFunc("GET /v1/certs/{id}", h.getCertDetail)
 	mux.Handle("PATCH /v1/certs/{id}/grade", auth(http.HandlerFunc(h.setCertGrade)))
@@ -123,6 +124,24 @@ func (h *Handler) createCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, card)
+}
+
+func (h *Handler) deleteCard(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "bad_id", "invalid card id")
+		return
+	}
+	found, err := deleteCard(r.Context(), h.DB, id)
+	if err != nil {
+		httpx.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if !found {
+		httpx.WriteError(w, http.StatusNotFound, "not_found", "card not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── Certs ────────────────────────────────────────────────────────────────────

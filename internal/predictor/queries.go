@@ -98,6 +98,14 @@ func createCard(ctx context.Context, db *pgxpool.Pool, game, setCode, setName, c
 	return &c, nil
 }
 
+func deleteCard(ctx context.Context, db *pgxpool.Pool, id int64) (bool, error) {
+	tag, err := db.Exec(ctx, `DELETE FROM cards WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // ── Certs ────────────────────────────────────────────────────────────────────
 
 type CertRow struct {
