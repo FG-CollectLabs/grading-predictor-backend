@@ -282,6 +282,20 @@ func getCertDetail(ctx context.Context, db *pgxpool.Pool, id int64) (*CertDetail
 	return &c, nil
 }
 
+// gradeFromCategory derives grade_received from the cert category so callers
+// don't have to set it separately when adding an already-graded cert.
+func gradeFromCategory(category string) *int16 {
+	switch category {
+	case "psa9", "cgc9", "bgs9":
+		g := int16(9)
+		return &g
+	case "psa10", "cgc10", "bgs10":
+		g := int16(10)
+		return &g
+	}
+	return nil
+}
+
 func createCert(ctx context.Context, db *pgxpool.Pool, cardID int64, certNumber, grader, notes, category, purpose string) (*CertDetail, error) {
 	var notesPtr *string
 	if notes != "" {
@@ -296,10 +310,10 @@ func createCert(ctx context.Context, db *pgxpool.Pool, cardID int64, certNumber,
 	var c CertDetail
 	var gradedAt pgtype.Date
 	err := db.QueryRow(ctx,
-		`INSERT INTO certifications (card_id, cert_number, grader, notes, category, purpose)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO certifications (card_id, cert_number, grader, notes, category, purpose, grade_received)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 RETURNING id, card_id, cert_number, grader, grade_received, graded_at, notes, category, purpose, created_at`,
-		cardID, certNumber, grader, notesPtr, category, purpose).
+		cardID, certNumber, grader, notesPtr, category, purpose, gradeFromCategory(category)).
 		Scan(&c.ID, &c.CardID, &c.CertNumber, &c.Grader, &c.GradeReceived, &gradedAt, &c.Notes,
 			&c.Category, &c.Purpose, &c.CreatedAt)
 	if err != nil {
@@ -313,6 +327,9 @@ func createCert(ctx context.Context, db *pgxpool.Pool, cardID int64, certNumber,
 }
 
 func updateCert(ctx context.Context, db *pgxpool.Pool, id int64, certNumber, grader, notes, category, purpose string, grade *int16, gradedAt pgtype.Date) (*CertDetail, error) {
+	if grade == nil {
+		grade = gradeFromCategory(category)
+	}
 	var notesPtr *string
 	if notes != "" {
 		notesPtr = &notes
