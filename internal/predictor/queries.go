@@ -366,6 +366,26 @@ type CertImageRow struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+func deleteCert(ctx context.Context, db *pgxpool.Pool, id int64) (bool, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err = tx.Exec(ctx, `DELETE FROM inspections WHERE cert_id = $1`, id); err != nil {
+		return false, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM cert_images WHERE cert_id = $1`, id); err != nil {
+		return false, err
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM certifications WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, tx.Commit(ctx)
+}
+
 func upsertCertImage(ctx context.Context, db *pgxpool.Pool, certID int64, side, gcsPath string) (*CertImageRow, error) {
 	var r CertImageRow
 	err := db.QueryRow(ctx, `

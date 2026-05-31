@@ -35,6 +35,7 @@ func (h *Handler) Routes(mux *http.ServeMux, auth httpx.Middleware) {
 	mux.Handle("POST /v1/certs", auth(http.HandlerFunc(h.createCert)))
 	mux.HandleFunc("GET /v1/certs/{id}", h.getCertDetail)
 	mux.Handle("PATCH /v1/certs/{id}", auth(http.HandlerFunc(h.patchCert)))
+	mux.Handle("DELETE /v1/certs/{id}", auth(http.HandlerFunc(h.deleteCert)))
 	mux.Handle("PATCH /v1/certs/{id}/grade", auth(http.HandlerFunc(h.setCertGrade)))
 	mux.Handle("POST /v1/certs/{id}/images", auth(http.HandlerFunc(h.uploadCertImage)))
 	mux.Handle("POST /v1/certs/{id}/inspections", auth(http.HandlerFunc(h.createInspection)))
@@ -277,6 +278,24 @@ func (h *Handler) setCertGrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, cert)
+}
+
+func (h *Handler) deleteCert(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "bad_id", "invalid cert id")
+		return
+	}
+	found, err := deleteCert(r.Context(), h.DB, id)
+	if err != nil {
+		httpx.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if !found {
+		httpx.WriteError(w, http.StatusNotFound, "not_found", "cert not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── Images ───────────────────────────────────────────────────────────────────
