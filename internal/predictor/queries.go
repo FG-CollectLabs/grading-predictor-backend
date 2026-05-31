@@ -99,11 +99,33 @@ func createCard(ctx context.Context, db *pgxpool.Pool, game, setCode, setName, c
 }
 
 func deleteCard(ctx context.Context, db *pgxpool.Pool, id int64) (bool, error) {
-	tag, err := db.Exec(ctx, `DELETE FROM cards WHERE id = $1`, id)
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return false, err
 	}
-	return tag.RowsAffected() > 0, nil
+	defer tx.Rollback(ctx)
+
+	// Delete child records in dependency order before removing the card.
+	if _, err = tx.Exec(ctx, `
+		DELETE FROM inspections WHERE cert_id IN (
+			SELECT id FROM certifications WHERE card_id = $1
+		)`, id); err != nil {
+		return false, err
+	}
+	if _, err = tx.Exec(ctx, `
+		DELETE FROM cert_images WHERE cert_id IN (
+			SELECT id FROM certifications WHERE card_id = $1
+		)`, id); err != nil {
+		return false, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM certifications WHERE card_id = $1`, id); err != nil {
+		return false, err
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM cards WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, tx.Commit(ctx)
 }
 
 // ── Certs ────────────────────────────────────────────────────────────────────
