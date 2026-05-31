@@ -34,6 +34,7 @@ func (h *Handler) Routes(mux *http.ServeMux, auth httpx.Middleware) {
 	mux.Handle("DELETE /v1/cards/{id}", auth(http.HandlerFunc(h.deleteCard)))
 	mux.Handle("POST /v1/certs", auth(http.HandlerFunc(h.createCert)))
 	mux.HandleFunc("GET /v1/certs/{id}", h.getCertDetail)
+	mux.Handle("PATCH /v1/certs/{id}", auth(http.HandlerFunc(h.patchCert)))
 	mux.Handle("PATCH /v1/certs/{id}/grade", auth(http.HandlerFunc(h.setCertGrade)))
 	mux.Handle("POST /v1/certs/{id}/images", auth(http.HandlerFunc(h.uploadCertImage)))
 	mux.Handle("POST /v1/certs/{id}/inspections", auth(http.HandlerFunc(h.createInspection)))
@@ -192,6 +193,53 @@ func (h *Handler) createCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, cert)
+}
+
+type patchCertRequest struct {
+	CertNumber    string `json:"cert_number"`
+	Grader        string `json:"grader"`
+	Notes         string `json:"notes"`
+	Category      string `json:"category"`
+	Purpose       string `json:"purpose"`
+	GradeReceived *int16 `json:"grade_received"`
+	GradedAt      string `json:"graded_at"` // YYYY-MM-DD or ""
+}
+
+func (h *Handler) patchCert(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "bad_id", "invalid cert id")
+		return
+	}
+	var req patchCertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if req.CertNumber == "" {
+		httpx.WriteError(w, http.StatusBadRequest, "missing_fields", "cert_number required")
+		return
+	}
+	var gradedAt pgtype.Date
+	if req.GradedAt != "" {
+		t, err := time.Parse("2006-01-02", req.GradedAt)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, "bad_date", "graded_at must be YYYY-MM-DD")
+			return
+		}
+		gradedAt = pgtype.Date{Time: t, Valid: true}
+	}
+	cert, err := updateCert(r.Context(), h.DB, id, req.CertNumber, req.Grader, req.Notes,
+		req.Category, req.Purpose, req.GradeReceived, gradedAt)
+	if err != nil {
+		if isNotFound(err) {
+			httpx.WriteError(w, http.StatusNotFound, "not_found", "cert not found")
+			return
+		}
+		httpx.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, cert)
 }
 
 type setCertGradeRequest struct {

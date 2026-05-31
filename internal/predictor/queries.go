@@ -312,6 +312,32 @@ func createCert(ctx context.Context, db *pgxpool.Pool, cardID int64, certNumber,
 	return &c, nil
 }
 
+func updateCert(ctx context.Context, db *pgxpool.Pool, id int64, certNumber, grader, notes, category, purpose string, grade *int16, gradedAt pgtype.Date) (*CertDetail, error) {
+	var notesPtr *string
+	if notes != "" {
+		notesPtr = &notes
+	}
+	var c CertDetail
+	var gd pgtype.Date
+	err := db.QueryRow(ctx, `
+		UPDATE certifications
+		SET cert_number = $2, grader = $3, notes = $4, category = $5, purpose = $6,
+		    grade_received = $7, graded_at = $8
+		WHERE id = $1
+		RETURNING id, card_id, cert_number, grader, grade_received, graded_at, notes, category, purpose, created_at`,
+		id, certNumber, grader, notesPtr, category, purpose, grade, gradedAt).
+		Scan(&c.ID, &c.CardID, &c.CertNumber, &c.Grader, &c.GradeReceived, &gd, &c.Notes,
+			&c.Category, &c.Purpose, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if gd.Valid {
+		s := gd.Time.Format("2006-01-02")
+		c.GradedAt = &s
+	}
+	return &c, nil
+}
+
 func setCertGrade(ctx context.Context, db *pgxpool.Pool, id int64, grade int16, gradedAt pgtype.Date) (*CertDetail, error) {
 	var c CertDetail
 	var gd pgtype.Date
